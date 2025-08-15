@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.eggs/
+*.so
+
+# Environment
+.env
+*.env
+.venv/
+venv/
+env/
+ENV/
+
+# Poetry
+poetry.lock
+# (optional — commit poetry.lock if you want to lock dependencies)
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+static_root/
+collectstatic/
+*.log
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Coverage / Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+.mypy_cache/
