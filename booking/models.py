@@ -24,6 +24,26 @@ class TimeOff(models.Model):
         return f"Выходной: {self.date} - {self.reason if self.reason else 'Без причины'}"
     
 
+class DaysOff(models.Model):
+    start = models.DateField(unique=True)
+    end = models.DateField()
+    reason = models.CharField(max_length=255, blank=True, null=True)
+    
+    class Meta:
+        ordering = ['-start', 'end']
+        
+        constraints = [
+            models.CheckConstraint(check=Q(end__gt=F("start")), name="daysoff_end_after_start"),
+        ]
+
+        
+        verbose_name = 'Выходной день'
+        verbose_name_plural = 'Выходные дни'
+        
+    def __str__(self):
+        return f"Выходные с: {self.start} По {self.end} - {self.reason if self.reason else 'Без причины'}"
+    
+
 class Booking(models.Model):
     class Status(models.TextChoices):
         PENDING    = "PENDING", "Pending"
