@@ -10,7 +10,7 @@ app.autodiscover_tasks()
 
 app.conf.beat_schedule = {
     "schedule-today-reminders-midnight": {
-        "task": "notifications.tasks.schedule_today_reminders",
-        "schedule": crontab(hour=0, minute=0),
+        "task": "notifications.tasks.schedule_outbox_event",
+        "schedule": crontab(hour=0, minute=10),
     },
 }

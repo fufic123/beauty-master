@@ -2,6 +2,9 @@ from django.db import models
 from django.utils import timezone
 from django.db.models import Q, F
 
+from datetime import timedelta
+
+
 # Create your models here.
 class TimeOff(models.Model):
     date = models.DateField(unique=True)
@@ -56,24 +59,49 @@ class Booking(models.Model):
     customer_phone = models.CharField(max_length=20)
     customer_email = models.EmailField(blank=True)
 
-    service   = models.ForeignKey("services.Service", on_delete=models.PROTECT, related_name="appointments")
-    date = models.DateField()
+    service   = models.ForeignKey(
+        "services.Service",
+        on_delete=models.PROTECT,
+        related_name="appointments",
+    )
+    language  = models.CharField(max_length=5, default="no")
+
     starts_at = models.DateTimeField()
-    ends_at   = models.DateTimeField()
-    status    = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    ends_at   = models.DateTimeField(blank=True, null=True)
+
+    status    = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
     notes     = models.TextField(blank=True)
     created_at = models.DateTimeField(default=timezone.now)
-    
+
     class Meta:
-        ordering = ['-date', 'starts_at']
-        
+        ordering = ['-starts_at']
         constraints = [
-            models.CheckConstraint(check=Q(ends_at__gt=F("starts_at")), name="appt_ends_after_starts"),
-            models.UniqueConstraint(fields=["starts_at"], name="uniq_start_single_master"),
+            models.CheckConstraint(
+                check=Q(ends_at__gt=F("starts_at")),
+                name="appt_ends_after_starts",
+            ),
+            models.UniqueConstraint(
+                fields=["starts_at"],
+                name="uniq_start_single_master",
+            ),
         ]
-        
         verbose_name = 'Бронирование'
         verbose_name_plural = 'Бронирования'
-        
+
+    @property
+    def date(self):
+        return self.starts_at.date()
+
+    def save(self, *args, **kwargs):
+        if self.service and self.starts_at and not self.ends_at:
+            duration = getattr(self.service, "duration_minutes", None)
+            if duration:
+                self.ends_at = self.starts_at + timedelta(minutes=duration)
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"Бронирование: {self.customer_name} - {self.service.name} on {self.date} at {self.start_time}"
+        return f"Бронирование: {self.customer_name} - {self.service.name} on {self.date} at {self.starts_at.time()}"

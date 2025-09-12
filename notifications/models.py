@@ -18,10 +18,5 @@ class OutboxEvent(models.Model):
     processed = models.BooleanField(default=False)
     processed_at = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        indexes = [
-            models.Index(fields=["processed", "execute_at"]),
-        ]
-
     def __str__(self):
         return f"{self.get_event_type_display()} at {self.execute_at} (processed={self.processed})"
