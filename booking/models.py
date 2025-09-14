@@ -98,7 +98,7 @@ class Booking(models.Model):
 
     def save(self, *args, **kwargs):
         if self.service and self.starts_at and not self.ends_at:
-            duration = getattr(self.service, "duration_minutes", None)
+            duration = getattr(self.service, "duration_min", None)
             if duration:
                 self.ends_at = self.starts_at + timedelta(minutes=duration)
         super().save(*args, **kwargs)

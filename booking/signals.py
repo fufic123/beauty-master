@@ -21,6 +21,8 @@ def _payload_base(b: Booking) -> dict:
         "customer_email": b.customer_email,
         "customer_phone": b.customer_phone,
         "starts_at": b.starts_at.isoformat() if b.starts_at else None,
+        "ends_at": b.ends_at.isoformat() if b.ends_at else None,
+        "duration_minutes": b.service.duration_min,
         "date": b.date.isoformat() if b.date else None,
         "language": b.language,
     }
@@ -28,9 +30,6 @@ def _payload_base(b: Booking) -> dict:
 
 @receiver(post_save, sender=Booking)
 def booking_created_outbox(sender, instance: Booking, created: bool, **kwargs):
-    if not created:
-        return
-
     now = timezone.now()
     local_today = timezone.localdate()
 
@@ -39,7 +38,7 @@ def booking_created_outbox(sender, instance: Booking, created: bool, **kwargs):
         execute_at=now,
         payload={
             **_payload_base(instance),
-            "recipient": "master",
+            "reason": f"booking_{instance.status.lower()}",
         },
     )
     send_outbox_event.delay(master_notify.id)
@@ -49,23 +48,25 @@ def booking_created_outbox(sender, instance: Booking, created: bool, **kwargs):
         execute_at=now,
         payload={
             **_payload_base(instance),
-            "recipient": "client",
+            "reason": f"booking_{instance.status.lower()}",
         },
     )
     send_outbox_event.delay(client_notify.id)
 
-    remind_at = instance.starts_at - timedelta(hours=1)
 
-    client_reminder = OutboxEvent.objects.create(
-        event_type="client_reminder",
-        execute_at=remind_at,
-        payload={
-            **_payload_base(instance),
-            "recipient": "client",
-            "reminder_offset_minutes": 60, # на час раньше
-        },
-    )
+    if created:
+        remind_at = instance.starts_at - timedelta(hours=1)
 
-    if remind_at.date() == local_today and remind_at > now:
-        register_outbox_event.delay(client_reminder.id)
-    # иначе ничего не делаем: ночной beat сам найдёт и зарегистрирует
+        client_reminder = OutboxEvent.objects.create(
+            event_type="client_reminder",
+            execute_at=remind_at,
+            payload={
+                **_payload_base(instance),
+                "reason": "booking_confirmed",
+                "reminder_offset_minutes": 60, # на час раньше
+            },
+        )
+
+        if remind_at.date() == local_today and remind_at > now:
+            register_outbox_event.delay(client_reminder.id)
+        # иначе ничего не делаем: ночной beat сам найдёт и зарегистрирует

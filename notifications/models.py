@@ -4,9 +4,9 @@ from django.utils import timezone
 
 class OutboxEvent(models.Model):
     class EventTypes(models.TextChoices):
-        MASTER_NOTIFY = "master_notify", "Notify Master"
-        CLIENT_REMINDER = "client_reminder", "Client Reminder"
+        MASTER_NOTIFY = "master_notify", "Notify Master" 
         CLIENT_NOTIFY = "client_notify", "Client Notify"
+        CLIENT_REMINDER = "client_reminder", "Client Reminder"
 
     
     event_type = models.CharField(
