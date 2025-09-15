@@ -47,29 +47,3 @@ def send_event(event_type: str, payload: dict) -> None:
     else:
         return
 
-
-
-
-
-
-
-
-    # for r in recipients:
-    #     context = {
-    #         "payload": payload,
-    #         "recipient_role": r.role,
-    #         "site_name": getattr(settings, "SITE_NAME", "My Site"),
-    #         "site_url": getattr(settings, "SITE_URL", "http://localhost"),
-    #     }
-    #     if r.channel == "email" and r.address:
-    #         send_email_notification(
-    #             template_base=template_base,
-    #             context=context,
-    #             to_email=r.address,
-    #             language=language,
-    #         )
-    #     elif r.channel == "telegram":
-    #         send_telegram_message(
-    #             template_base=template_base,
-    #             context=context,
-    #         )
