@@ -1,6 +1,7 @@
 from __future__ import annotations
-from datetime import datetime, date, timedelta
-from typing import List, Dict, Any
+
+from datetime import datetime, date, timedelta, time
+from typing import List, Dict
 
 from django.conf import settings
 from django.utils import timezone
@@ -9,51 +10,58 @@ from booking.models import Booking, DaysOff, TimeOff
 from services.models import Service
 
 
-LOCK_TIMEOUT = settings.LOCK_TIMEOUT
-WORK_START = settings.WORK_START
-WORK_END = settings.WORK_END
-GRID_STEP = settings.GRID_STEP  # in minutes
+# настройки
+LOCK_TIMEOUT: timedelta = timedelta(minutes=settings.LOCK_TIMEOUT)
+WORK_START: time = time(settings.WORK_START, 0)   # например, 10:00
+WORK_END: time = time(settings.WORK_END, 0)       # например, 20:00
+GRID_STEP: int = settings.GRID_STEP               # шаг сетки, мин
 
 
-def get_available_days(service: Service, days_ahead: int = 60, grid_step: int = GRID_STEP) -> List[date]:
+def get_available_days(
+    service: Service,
+    days_ahead: int = 60,
+    grid_step: int = GRID_STEP,
+) -> List[date]:
+    """Вернуть список доступных дней (не воскресенье, не выходные, есть свободные слоты)."""
     today: date = timezone.localdate()
     end_date: date = today + timedelta(days=days_ahead)
     now: datetime = timezone.now()
 
-    # загружаем все брони за диапазон
+    # все брони в диапазоне
     all_bookings: List[Booking] = list(
-        Booking.objects.filter(
-            starts_at__date__range=(today, end_date)
-        ).exclude(status=Booking.Status.CANCELLED
-        ).exclude(
+        Booking.objects.filter(starts_at__date__range=(today, end_date))
+        .exclude(status=Booking.Status.CANCELLED)
+        .exclude(
             status=Booking.Status.PENDING,
-            created_at__lt=now - LOCK_TIMEOUT
+            created_at__lt=now - LOCK_TIMEOUT,
         )
     )
 
-    # группируем брони по дню
+    # группировка броней по дню
     bookings_by_day: Dict[date, List[Booking]] = {}
     for b in all_bookings:
-        day = b.starts_at.date()
-        bookings_by_day.setdefault(day, []).append(b)
+        bookings_by_day.setdefault(b.starts_at.date(), []).append(b)
 
-    # загружаем все TimeOff
+    # timeoffs по дню
     all_timeoffs: List[TimeOff] = list(TimeOff.objects.filter(date__range=(today, end_date)))
     timeoffs_by_day: Dict[date, List[TimeOff]] = {}
     for t in all_timeoffs:
         timeoffs_by_day.setdefault(t.date, []).append(t)
 
-    # загружаем DaysOff
-    all_daysoff: List[DaysOff] = list(DaysOff.objects.filter(start__lte=end_date, end__gte=today))
+    # выходные дни
+    all_daysoff: List[DaysOff] = list(
+        DaysOff.objects.filter(start__lte=end_date, end__gte=today)
+    )
 
     result: List[date] = []
     for offset in range(days_ahead):
         current_day: date = today + timedelta(days=offset)
 
-        if current_day.weekday() == 6:  # 6=воскресенье
+        # воскресенье
+        if current_day.weekday() == 6:
             continue
 
-        # проверка полного выходного (DaysOff)
+        # проверка DaysOff
         if any(d.start <= current_day <= d.end for d in all_daysoff):
             continue
 
@@ -73,25 +81,23 @@ def get_available_days(service: Service, days_ahead: int = 60, grid_step: int = 
 def get_available_slots(
     service: Service,
     day: date,
-    grid_step: int = GRID_STEP
+    grid_step: int = GRID_STEP,
 ) -> List[Dict[str, datetime]]:
-    # Воскресенье
-    if day.weekday() == 6:
+    """Вернуть доступные слоты на конкретный день."""
+    if day.weekday() == 6:  # воскресенье
         return []
 
     now: datetime = timezone.now()
 
-    # брони только на выбранный день
     bookings: List[Booking] = list(
-        Booking.objects.filter(starts_at__date=day
-        ).exclude(status=Booking.Status.CANCELLED
-        ).exclude(
+        Booking.objects.filter(starts_at__date=day)
+        .exclude(status=Booking.Status.CANCELLED)
+        .exclude(
             status=Booking.Status.PENDING,
-            created_at__lt=now - LOCK_TIMEOUT
+            created_at__lt=now - LOCK_TIMEOUT,
         )
     )
 
-    # timeoff только на этот день
     timeoffs: List[TimeOff] = list(TimeOff.objects.filter(date=day))
 
     return _generate_slots(service, day, bookings, timeoffs, grid_step)
@@ -102,10 +108,11 @@ def _generate_slots(
     day: date,
     bookings: List[Booking],
     timeoffs: List[TimeOff],
-    grid_step: int = GRID_STEP
+    grid_step: int = GRID_STEP,
 ) -> List[Dict[str, datetime]]:
-    work_start: datetime = datetime.combine(day, WORK_START)
-    work_end: datetime = datetime.combine(day, WORK_END)
+    """Сгенерировать все свободные слоты для дня с учётом броней и перерывов."""
+    work_start: datetime = timezone.make_aware(datetime.combine(day, WORK_START))
+    work_end: datetime = timezone.make_aware(datetime.combine(day, WORK_END))
 
     duration: timedelta = timedelta(minutes=service.duration_min)
     buffer: timedelta = timedelta(minutes=service.buffer_after_min)
@@ -114,49 +121,57 @@ def _generate_slots(
     slots: List[Dict[str, datetime]] = []
     current: datetime = work_start
 
+    # сортируем брони и тайм-оффы для удобства
+    bookings = sorted(bookings, key=lambda b: b.starts_at)
+    timeoffs = sorted(timeoffs, key=lambda t: t.start or time.min)
+
     while current <= work_end:
         candidate_start: datetime = current
         candidate_end: datetime = candidate_start + duration
 
-        # если услуга уходит за рабочее время → прерываем цикл
+        # если услуга выходит за рабочий день → стоп
         if candidate_end > work_end:
             break
-            
-        # пересечение с booking
-        overlap_booking: bool = False
+
+        # флаг пересечения
+        blocked = False
+
+        # проверка бронирований
         for b in bookings:
             b_start: datetime = b.starts_at
             b_end: datetime = b.ends_at or (
                 b.starts_at + timedelta(minutes=b.service.duration_min)
             )
-            # добавляем буфер к броням (но не к текущему слоту)
             b_end = b_end + timedelta(minutes=b.service.buffer_after_min)
 
+            # если слот пересекается с бронью
             if not (candidate_end <= b_start or candidate_start >= b_end):
-                overlap_booking = True
-                current = max(current + step, b_end)  # прыгаем вперёд
-                break
-                
-        # пересечение с timeoff
-        overlap_timeoff: bool = False
+                blocked = True
+                current = max(current + step, b_end)
+                break            
+
+        if blocked:
+            continue
+
+        # проверка timeoff
         for to in timeoffs:
-            to_start: datetime = datetime.combine(day, to.start)
-            to_end: datetime = datetime.combine(day, to.end)
+            if not (to.start and to.end):
+                continue
+            to_start: datetime = timezone.make_aware(datetime.combine(day, to.start))
+            to_end: datetime = timezone.make_aware(datetime.combine(day, to.end))
 
             if candidate_start < to_end and candidate_end > to_start:
-                overlap_timeoff = True
+                blocked = True
                 current = max(current + step, to_end)
                 break
 
-        is_last_slot: bool = candidate_end == work_end
-        if not overlap_booking and not overlap_timeoff:
-            if is_last_slot:
-                # разрешаем без учёта buffer после услуги
-                slots.append({"start": candidate_start, "end": candidate_end})
-            else:
-                # обычный случай
-                slots.append({"start": candidate_start, "end": candidate_end})
+        if blocked:
+            continue
 
+        # слот валиден
+        slots.append({"start": candidate_start, "end": candidate_end})
+
+        # шаг вперёд
         current += step
 
     return slots

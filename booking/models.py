@@ -36,7 +36,7 @@ class DaysOff(models.Model):
         ordering = ['-start', 'end']
         
         constraints = [
-            models.CheckConstraint(check=Q(end__gt=F("start")), name="daysoff_end_after_start"),
+            models.CheckConstraint(check=Q(end__gte=F("start")), name="daysoff_end_after_start"),
         ]
 
         

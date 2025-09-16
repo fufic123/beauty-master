@@ -1,5 +1,5 @@
 # Dockerfile
-FROM python:3.12-slim
+FROM python:3.12-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -20,7 +20,6 @@ WORKDIR /app
 # copy only dependency files first (better layer caching)
 COPY pyproject.toml poetry.lock* /app/
 RUN poetry install --no-interaction --no-ansi --no-root
-
 
 # copy project
 COPY . /app
