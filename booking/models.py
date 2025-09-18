@@ -103,5 +103,21 @@ class Booking(models.Model):
                 self.ends_at = self.starts_at + timedelta(minutes=duration)
         super().save(*args, **kwargs)
 
+    def confirm(self):
+        self.status = Booking.Status.CONFIRMED
+        self.save(update_fields=["status"])
+
+    def complete(self):
+        self.status = Booking.Status.COMPLETED
+        self.save(update_fields=["status"])
+
+    def cancel(self):
+        self.status = Booking.Status.CANCELLED
+        self.save(update_fields=["status"])
+
+    def mark_no_show(self):
+        self.status = Booking.Status.NO_SHOW
+        self.save(update_fields=["status"])
+
     def __str__(self):
         return f"Бронирование: {self.customer_name} - {self.service.name} on {self.date} at {self.starts_at.time()}"
