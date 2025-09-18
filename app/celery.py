@@ -13,4 +13,8 @@ app.conf.beat_schedule = {
         "task": "notifications.tasks.schedule_outbox_event",
         "schedule": crontab(hour=0, minute=10),
     },
+    "clean-old-pending-bookings": {
+        "task": "booking.tasks.clean_old_pending_bookings",
+        "schedule": crontab(hour=0, minute=0),
+    },
 }
