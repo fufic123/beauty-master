@@ -21,24 +21,17 @@ from .services.telegram_service import TelegramServiceError
     retry_kwargs={"max_retries": 5},
 )
 def send_outbox_event(outbox_id: int):
-    """
-    Достаём событие, шлём уведомления, помечаем processed.
-    Если отправка упала (сетевые/SMTP/наш TelegramError=RuntimeError) — Celery делает ретраи.
-    """
-    try:
-        with transaction.atomic():
-            event = OutboxEvent.objects.select_for_update().get(id=outbox_id)
-            if event.processed:
-                return
+    with transaction.atomic():
+        event = OutboxEvent.objects.select_for_update().get(id=outbox_id)
+        if event.processed:
+            return
 
-            send_event(event.event_type, event.payload)
+        send_event(event.event_type, event.payload)
 
-            event.processed = True
-            event.processed_at = timezone.now()
-            event.save(update_fields=["processed", "processed_at"])
-    except ObjectDoesNotExist:
-        print(f"[send_outbox_event] OutboxEvent {outbox_id} not found — skipping")
-        return
+        event.processed = True
+        event.processed_at = timezone.now()
+        event.save(update_fields=["processed", "processed_at"])
+    
 
 @shared_task
 def register_outbox_event(outbox_id: int):
@@ -49,7 +42,9 @@ def register_outbox_event(outbox_id: int):
     event = OutboxEvent.objects.get(id=outbox_id)
     now = timezone.now()
     if event.execute_at and event.execute_at > now:
-        send_outbox_event.apply_async(args=[event.id], eta=event.execute_at)
+        res = send_outbox_event.apply_async(args=[event.id], eta=event.execute_at)
+        event.task_id = res.id
+        event.save(update_fields=["task_id"])
     else:
         send_outbox_event.delay(event.id)
 

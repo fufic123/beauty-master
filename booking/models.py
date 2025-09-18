@@ -59,22 +59,22 @@ class Booking(models.Model):
     customer_phone = models.CharField(max_length=20)
     customer_email = models.EmailField(blank=True)
 
-    service   = models.ForeignKey(
+    service = models.ForeignKey(
         "services.Service",
         on_delete=models.PROTECT,
         related_name="appointments",
     )
-    language  = models.CharField(max_length=5, default="no")
+    language = models.CharField(max_length=5, default="no")
 
     starts_at = models.DateTimeField()
-    ends_at   = models.DateTimeField(blank=True, null=True)
+    ends_at = models.DateTimeField(blank=True, null=True)
 
-    status    = models.CharField(
+    status = models.CharField(
         max_length=12,
         choices=Status.choices,
         default=Status.PENDING,
     )
-    notes     = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:

@@ -17,6 +17,15 @@ class OutboxEvent(models.Model):
     execute_at = models.DateTimeField(default=timezone.now)
     processed = models.BooleanField(default=False)
     processed_at = models.DateTimeField(null=True, blank=True)
-
+    
+    booking_id = models.IntegerField(null=True, db_index=True)
+    task_id = models.CharField(max_length=255, null=True, blank=True)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=["processed", "execute_at"]),
+            models.Index(fields=["booking_id"]),
+        ]
+    
     def __str__(self):
         return f"{self.get_event_type_display()} at {self.execute_at} (processed={self.processed})"
